@@ -15,9 +15,14 @@ import AgenciesPage from './pages/super-admin/Agencies'
 import AgencyDashboard from './pages/agency/Dashboard'
 import AgentsPage from './pages/agency/Agents'
 import LeadsPage from './pages/agency/Leads'
+import PropertiesPage from './pages/agency/Properties'
 
 // Agent
 import AgentDashboard from './pages/agent/Dashboard'
+
+import InboxPage from './pages/agency/Inbox'
+
+import CalendarPage from './pages/agency/Calendar'
 
 function App() {
   return (
@@ -49,9 +54,12 @@ function App() {
             </ProtectedRoute>
           }>
             <Route index element={<Navigate to="dashboard" replace />} />
-            <Route path="dashboard" element={<AgencyDashboard />} />
-            <Route path="agents"    element={<AgentsPage />} />
-            <Route path="leads"     element={<LeadsPage />} />
+            <Route path="dashboard"  element={<AgencyDashboard />} />
+            <Route path="agents"     element={<AgentsPage />} />
+            <Route path="leads"      element={<LeadsPage />} />
+            <Route path="properties" element={<PropertiesPage />} /> 
+            <Route path="inbox" element={<InboxPage />} />
+            <Route path="calendar" element={<CalendarPage />} />
           </Route>
 
           {/* ─── Agent ─── */}
@@ -61,8 +69,11 @@ function App() {
             </ProtectedRoute>
           }>
             <Route index element={<Navigate to="dashboard" replace />} />
-            <Route path="dashboard" element={<AgentDashboard />} />
-            <Route path="leads"     element={<LeadsPage />} />  {/* ← ADDED */}
+            <Route path="dashboard"  element={<AgentDashboard />} />
+            <Route path="leads"      element={<LeadsPage />} />
+            <Route path="properties" element={<PropertiesPage />} />  
+            <Route path="inbox" element={<InboxPage />} />
+            <Route path="calendar" element={<CalendarPage />} />
           </Route>
 
           {/* ─── Fallback ─── */}

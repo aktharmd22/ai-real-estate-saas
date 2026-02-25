@@ -19,21 +19,23 @@ const NAV_ITEMS = {
   agency_admin: [
         { label: 'Dashboard',   path: '/agency/dashboard',   icon: LayoutDashboard },
         { label: 'Leads',       path: '/agency/leads',       icon: Users },      // ← this
-        { label: 'Properties',  path: '/agency/properties',  icon: Home },
-        { label: 'Inbox',       path: '/agency/inbox',       icon: MessageSquare },
-        { label: 'Calendar',    path: '/agency/calendar',    icon: Calendar },
+        { label: 'Properties', path: '/agency/properties', icon: Building2 },
+        { label: 'Inbox', path: '/agency/inbox', icon: MessageSquare },
+        { label: 'Calendar', path: '/agency/calendar', icon: Calendar },
         { label: 'Agents',      path: '/agency/agents',      icon: Users },
         { label: 'Automations', path: '/agency/automations', icon: Zap },
         { label: 'Analytics',   path: '/agency/analytics',   icon: BarChart2 },
         { label: 'Billing',     path: '/agency/billing',     icon: CreditCard },
         { label: 'Settings',    path: '/agency/settings',    icon: Settings },
+        
         ],
   agent: [
     { label: 'Dashboard',  path: '/agent/dashboard',  icon: LayoutDashboard },
     { label: 'My Leads',   path: '/agent/leads',      icon: Users },
-    { label: 'Inbox',      path: '/agent/inbox',      icon: MessageSquare },
-    { label: 'Calendar',   path: '/agent/calendar',   icon: Calendar },
-    { label: 'Properties', path: '/agent/properties', icon: Home },
+    { label: 'Properties', path: '/agent/properties', icon: Building2 },
+    { label: 'Inbox', path: '/agent/inbox',  icon: MessageSquare },
+    { label: 'Calendar', path: '/agent/calendar',  icon: Calendar }
+    
   ],
 }
 
