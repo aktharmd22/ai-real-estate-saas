@@ -11,18 +11,16 @@ import LoginPage from './pages/auth/LoginPage'
 import SuperAdminDashboard from './pages/super-admin/Dashboard'
 import AgenciesPage from './pages/super-admin/Agencies'
 
-// Agency Admin
+// Agency Admin + Agent (shared pages)
 import AgencyDashboard from './pages/agency/Dashboard'
-import AgentsPage from './pages/agency/Agents'
-import LeadsPage from './pages/agency/Leads'
-import PropertiesPage from './pages/agency/Properties'
-
-// Agent
-import AgentDashboard from './pages/agent/Dashboard'
-
-import InboxPage from './pages/agency/Inbox'
-
-import CalendarPage from './pages/agency/Calendar'
+import AgentDashboard  from './pages/agent/Dashboard'
+import AgentsPage      from './pages/agency/Agents'
+import LeadsPage       from './pages/agency/Leads'
+import PropertiesPage  from './pages/agency/Properties'
+import InboxPage       from './pages/agency/Inbox'
+import CalendarPage    from './pages/agency/Calendar'
+import AnalyticsPage   from './pages/agency/Analytics'
+import SettingsPage    from './pages/agency/Settings'
 
 function App() {
   return (
@@ -57,9 +55,11 @@ function App() {
             <Route path="dashboard"  element={<AgencyDashboard />} />
             <Route path="agents"     element={<AgentsPage />} />
             <Route path="leads"      element={<LeadsPage />} />
-            <Route path="properties" element={<PropertiesPage />} /> 
-            <Route path="inbox" element={<InboxPage />} />
-            <Route path="calendar" element={<CalendarPage />} />
+            <Route path="properties" element={<PropertiesPage />} />
+            <Route path="inbox"      element={<InboxPage />} />
+            <Route path="calendar"   element={<CalendarPage />} />
+            <Route path="analytics"  element={<AnalyticsPage />} />
+            <Route path="settings"   element={<SettingsPage />} />
           </Route>
 
           {/* ─── Agent ─── */}
@@ -71,9 +71,9 @@ function App() {
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard"  element={<AgentDashboard />} />
             <Route path="leads"      element={<LeadsPage />} />
-            <Route path="properties" element={<PropertiesPage />} />  
-            <Route path="inbox" element={<InboxPage />} />
-            <Route path="calendar" element={<CalendarPage />} />
+            <Route path="properties" element={<PropertiesPage />} />
+            <Route path="inbox"      element={<InboxPage />} />
+            <Route path="calendar"   element={<CalendarPage />} />
           </Route>
 
           {/* ─── Fallback ─── */}

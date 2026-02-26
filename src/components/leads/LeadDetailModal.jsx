@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { X, Phone, Mail, MapPin, User } from 'lucide-react'
+import { X, Phone, Mail, MapPin, User, Sparkles } from 'lucide-react'
 import api from '../../lib/axios'
 import Button from '../ui/Button'
 import Badge from '../ui/Badge'
@@ -21,72 +21,127 @@ export default function LeadDetailModal({ lead: initialLead, onClose, apiBase = 
   const [localStatus, setLocalStatus] = useState(initialLead.status)
   const [localScore, setLocalScore]   = useState(initialLead.score || 0)
   const [scoreSaved, setScoreSaved]   = useState(false)
+  const [aiResult, setAiResult]       = useState(null)
+  const [aiError, setAiError]         = useState(null)
 
   // ─── Fetch full lead with notes ──────────────────────────────────────────
-  const { data: leadData, refetch } = useQuery({
+  const { data: lead = initialLead } = useQuery({
     queryKey: ['lead', initialLead.id, apiBase],
     queryFn: () => api.get(`${apiBase}/leads/${initialLead.id}`)
-      .then(r => {
-        // Handle both {data: {...}} and direct object
-        const lead = r.data?.data || r.data
-        return lead
-      }),
+      .then(r => r.data?.data || r.data),
+    // Refetch every time window focuses
+    refetchOnWindowFocus: true,
   })
 
-  const lead = leadData || initialLead
+  // ─── Sync localStatus & localScore when server data arrives ─────────────
+  useEffect(() => {
+    if (lead?.status) setLocalStatus(lead.status)
+  }, [lead?.status])
+
+  useEffect(() => {
+    if (lead?.score !== undefined) setLocalScore(lead.score || 0)
+  }, [lead?.score])
 
   // ─── Update status ───────────────────────────────────────────────────────
   const updateStatus = useMutation({
     mutationFn: (status) => api.put(`${apiBase}/leads/${lead.id}`, { status }),
-    onSuccess: () => {
-      // Just refetch — don't try to parse response
-      refetch()
-      qc.invalidateQueries(['leads'])
-      qc.invalidateQueries(['leads-kanban'])
-      qc.invalidateQueries(['lead-stats'])
+    onMutate: (status) => {
+      // Optimistic update — change UI immediately
+      setLocalStatus(status)
     },
-    onError: (err) => {
-      // Revert local status
-      setLocalStatus(lead.status)
-      console.error('Status update error:', err.response?.status, err.response?.data)
+    onSuccess: (res) => {
+      // Update query cache directly with new data
+      const updated = res.data?.data || res.data
+      if (updated) {
+        qc.setQueryData(['lead', initialLead.id, apiBase], updated)
+      }
+      // Invalidate list queries so table + kanban update too
+      qc.invalidateQueries({ queryKey: ['leads'] })
+      qc.invalidateQueries({ queryKey: ['leads-kanban'] })
+      qc.invalidateQueries({ queryKey: ['lead-stats'] })
+    },
+    onError: (err, status, context) => {
+      // Revert on error
+      setLocalStatus(initialLead.status)
+      console.error('Status update failed:', err.response?.data)
     },
   })
 
   // ─── Update score ────────────────────────────────────────────────────────
   const updateScore = useMutation({
     mutationFn: (score) => api.put(`${apiBase}/leads/${lead.id}`, { score }),
-    onSuccess: () => {
+    onSuccess: (res) => {
+      const updated = res.data?.data || res.data
+      if (updated) {
+        qc.setQueryData(['lead', initialLead.id, apiBase], updated)
+      }
       setScoreSaved(true)
       setTimeout(() => setScoreSaved(false), 2000)
-      refetch()
-      qc.invalidateQueries(['leads'])
+      qc.invalidateQueries({ queryKey: ['leads'] })
     },
     onError: (err) => {
-      console.error('Score update error:', err.response?.status, err.response?.data)
+      console.error('Score update failed:', err.response?.data)
     },
   })
 
   // ─── Add note ────────────────────────────────────────────────────────────
+  // ─── AI Score ─────────────────────────────────────────────────────────────
+  const aiScore = useMutation({
+    mutationFn: () => api.post(`/agency/leads/${lead.id}/ai-score`),
+    onSuccess: (res) => {
+      const data = res.data?.data
+      setAiResult(data)
+      setAiError(null)
+      setLocalScore(data.score)
+      qc.invalidateQueries({ queryKey: ['lead', lead.id] })
+      qc.invalidateQueries({ queryKey: ['leads'] })
+      qc.invalidateQueries({ queryKey: ['notes', lead.id] })
+    },
+    onError: (err) => {
+      const status  = err.response?.status
+      const message = err.response?.data?.message
+
+      // Translate technical errors into user-friendly messages
+      if (status === 404) {
+        setAiError('AI scoring route not found. Please ask your developer to register the route: POST api/v1/agency/leads/{lead}/ai-score')
+      } else if (status === 422 && message?.includes('not enabled')) {
+        setAiError('AI scoring is not enabled. Go to Settings → OpenAI Integration → turn on "Enable AI Scoring".')
+      } else if (status === 422 && message?.includes('API key')) {
+        setAiError('No OpenAI API key found. Go to Settings → OpenAI Integration → add your API key.')
+      } else if (status === 401) {
+        setAiError('Invalid OpenAI API key. Go to Settings and check your key is correct.')
+      } else if (status === 429) {
+        setAiError('OpenAI rate limit reached. Please wait a moment and try again.')
+      } else if (status === 500) {
+        setAiError('Server error while scoring. Check your backend logs for details.')
+      } else if (message) {
+        setAiError(message)
+      } else {
+        setAiError('AI scoring failed. Please check your Settings and try again.')
+      }
+      setAiResult(null)
+    },
+  })
+
   const addNote = useMutation({
     mutationFn: () => api.post(`${apiBase}/leads/${lead.id}/notes`, {
       content: noteContent,
       type: noteType,
     }),
-    onSuccess: () => {
-      refetch()
+    onSuccess: (res) => {
+      // Refetch lead to get updated notes list
+      qc.invalidateQueries({ queryKey: ['lead', initialLead.id, apiBase] })
       setNoteContent('')
       setNoteType('note')
     },
     onError: (err) => {
-      console.error('Add note error:', err.response?.status, err.response?.data)
+      console.error('Add note failed:', err.response?.data)
     },
   })
 
-  // Sync localStatus when lead data refreshes
-  const currentStatus = localStatus
-  const statusCfg     = LEAD_STATUS_CONFIG[currentStatus] || LEAD_STATUS_CONFIG.new
-  const notes         = lead.notes || []
-  const scoreColor    = localScore >= 70 ? '#10B981' : localScore >= 40 ? '#F59E0B' : '#EF4444'
+  const statusCfg  = LEAD_STATUS_CONFIG[localStatus] || LEAD_STATUS_CONFIG.new
+  const notes      = lead.notes || []
+  const scoreColor = localScore >= 70 ? '#10B981' : localScore >= 40 ? '#F59E0B' : '#EF4444'
 
   return (
     <div style={{
@@ -127,9 +182,7 @@ export default function LeadDetailModal({ lead: initialLead, onClose, apiBase = 
                 <span style={{ fontSize: 12, color: scoreColor, fontWeight: 600 }}>
                   Score: {localScore}/100
                 </span>
-                <span style={{ fontSize: 12, color: '#94A3B8' }}>
-                  via {lead.source}
-                </span>
+                <span style={{ fontSize: 12, color: '#94A3B8' }}>via {lead.source}</span>
               </div>
             </div>
           </div>
@@ -148,19 +201,17 @@ export default function LeadDetailModal({ lead: initialLead, onClose, apiBase = 
           display: 'flex', gap: 6, flexShrink: 0, overflowX: 'auto',
         }}>
           {Object.entries(LEAD_STATUS_CONFIG).map(([status, cfg]) => {
-            const isActive = currentStatus === status
+            const isActive = localStatus === status
             return (
               <button
                 key={status}
                 onClick={() => {
                   if (isActive || updateStatus.isPending) return
-                  setLocalStatus(status)
                   updateStatus.mutate(status)
                 }}
                 disabled={updateStatus.isPending}
                 style={{
-                  flex: 1, minWidth: 80, padding: '7px 8px',
-                  borderRadius: 8,
+                  flex: 1, minWidth: 80, padding: '7px 8px', borderRadius: 8,
                   border: `1.5px solid ${isActive ? cfg.color : '#E2E8F0'}`,
                   background: isActive ? cfg.bg : '#fff',
                   color: isActive ? cfg.color : '#94A3B8',
@@ -220,7 +271,7 @@ export default function LeadDetailModal({ lead: initialLead, onClose, apiBase = 
         {/* ── Body ── */}
         <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
 
-          {/* ── OVERVIEW TAB ── */}
+          {/* OVERVIEW TAB */}
           {activeTab === 'overview' && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
 
@@ -279,19 +330,114 @@ export default function LeadDetailModal({ lead: initialLead, onClose, apiBase = 
                   </div>
                 ))}
 
-                {/* ── Score Editor ── */}
-                <div style={{
-                  padding: '14px', borderRadius: 10,
-                  background: '#F8FAFC', border: '1px solid #F1F5F9',
-                }}>
+                {/* Score Editor */}
+                <div style={{ padding: '14px', borderRadius: 10, background: '#F8FAFC', border: '1px solid #F1F5F9' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                     <div style={{ fontSize: 11, color: '#94A3B8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>
                       Lead Score
                     </div>
-                    <div style={{ fontSize: 15, fontWeight: 800, color: scoreColor }}>
-                      {localScore}/100
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ fontSize: 15, fontWeight: 800, color: scoreColor }}>{localScore}/100</div>
+                      {/* AI Score button */}
+                      <button
+                        onClick={() => { setAiResult(null); setAiError(null); aiScore.mutate() }}
+                        disabled={aiScore.isPending}
+                        title="Score with AI"
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 5,
+                          padding: '4px 10px', borderRadius: 20, border: 'none',
+                          background: aiScore.isPending
+                            ? '#E2E8F0'
+                            : 'linear-gradient(135deg, #2563EB, #7C3AED)',
+                          color: aiScore.isPending ? '#94A3B8' : '#fff',
+                          fontSize: 11, fontWeight: 700, cursor: aiScore.isPending ? 'not-allowed' : 'pointer',
+                          fontFamily: "'DM Sans', sans-serif", transition: 'all 0.15s',
+                        }}
+                      >
+                        <Sparkles size={11} />
+                        {aiScore.isPending ? 'Scoring...' : 'AI Score'}
+                      </button>
                     </div>
                   </div>
+
+                  {/* AI Error */}
+                  {aiError && (
+                    <div style={{
+                      padding: '10px 14px', borderRadius: 10, marginBottom: 12,
+                      background: '#FEF2F2', border: '1px solid #FECACA',
+                      display: 'flex', gap: 10, alignItems: 'flex-start',
+                    }}>
+                      <span style={{ fontSize: 16, flexShrink: 0 }}>⚠️</span>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: '#DC2626', marginBottom: 3 }}>
+                          AI Scoring Failed
+                        </div>
+                        <div style={{ fontSize: 12, color: '#7F1D1D', lineHeight: 1.6 }}>
+                          {aiError}
+                        </div>
+                        {(aiError.includes('Settings') || aiError.includes('route')) && (
+                          <button
+                            onClick={() => window.open('/agency/settings', '_blank')}
+                            style={{
+                              marginTop: 8, padding: '4px 12px', borderRadius: 6,
+                              border: '1px solid #FECACA', background: '#fff',
+                              fontSize: 11, fontWeight: 600, color: '#DC2626',
+                              cursor: 'pointer', fontFamily: "'DM Sans', sans-serif",
+                            }}
+                          >
+                            Go to Settings →
+                          </button>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => setAiError(null)}
+                        style={{
+                          border: 'none', background: 'none', cursor: 'pointer',
+                          color: '#94A3B8', fontSize: 16, lineHeight: 1, flexShrink: 0,
+                          padding: 0,
+                        }}
+                      >×</button>
+                    </div>
+                  )}
+
+                  {/* AI Result panel */}
+                  {aiResult && (
+                    <div style={{
+                      padding: '12px', borderRadius: 10, marginBottom: 12,
+                      background: 'linear-gradient(135deg, #EFF6FF, #F5F3FF)',
+                      border: '1px solid #BFDBFE',
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: '#1E40AF' }}>
+                          🤖 AI Analysis
+                        </span>
+                        <span style={{
+                          fontSize: 11, padding: '2px 8px', borderRadius: 20, fontWeight: 700,
+                          background: aiResult.priority === 'hot' ? '#FEF3C7'
+                            : aiResult.priority === 'warm' ? '#ECFDF5' : '#F1F5F9',
+                          color: aiResult.priority === 'hot' ? '#D97706'
+                            : aiResult.priority === 'warm' ? '#059669' : '#64748B',
+                        }}>
+                          {aiResult.priority === 'hot' ? '🔥 Hot' : aiResult.priority === 'warm' ? '🌤 Warm' : '❄️ Cold'}
+                        </span>
+                      </div>
+                      <p style={{ fontSize: 12, color: '#374151', lineHeight: 1.6, margin: '0 0 8px' }}>
+                        {aiResult.reason}
+                      </p>
+                      {aiResult.factors?.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                          {aiResult.factors.map((f, i) => (
+                            <span key={i} style={{
+                              fontSize: 10, padding: '2px 8px', borderRadius: 20,
+                              background: '#E0E7FF', color: '#3730A3', fontWeight: 600,
+                            }}>
+                              {f}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <div style={{ background: '#E2E8F0', borderRadius: 999, height: 8, marginBottom: 12, overflow: 'hidden' }}>
                     <div style={{
@@ -314,8 +460,7 @@ export default function LeadDetailModal({ lead: initialLead, onClose, apiBase = 
                       { label: '🔥 Hot',  value: 80,  color: '#10B981', bg: '#ECFDF5' },
                       { label: '🏆 Won',  value: 100, color: '#2563EB', bg: '#EFF6FF' },
                     ].map(btn => (
-                      <button
-                        key={btn.label}
+                      <button key={btn.label}
                         onClick={() => { setLocalScore(btn.value); setScoreSaved(false) }}
                         style={{
                           flex: 1, padding: '4px', borderRadius: 6,
@@ -352,15 +497,14 @@ export default function LeadDetailModal({ lead: initialLead, onClose, apiBase = 
                       : 'Save Score'}
                   </button>
                 </div>
-
               </div>
+
             </div>
           )}
 
-          {/* ── NOTES TAB ── */}
+          {/* NOTES TAB */}
           {activeTab === 'notes' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
               <div style={{ padding: 16, borderRadius: 12, border: '1px solid #E2E8F0', background: '#FAFAFA' }}>
                 <textarea
                   value={noteContent}
@@ -389,8 +533,7 @@ export default function LeadDetailModal({ lead: initialLead, onClose, apiBase = 
                       </button>
                     ))}
                   </div>
-                  <Button
-                    size="sm"
+                  <Button size="sm"
                     onClick={() => noteContent.trim() && addNote.mutate()}
                     loading={addNote.isPending}
                     disabled={!noteContent.trim()}

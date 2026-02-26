@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight, Plus, Calendar, List, Clock } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, Calendar, List, Clock, Pencil, Trash2 } from 'lucide-react'
 import api from '../../lib/axios'
 import useAuthStore from '../../store/authStore'
 import AppointmentModal from '../../components/calendar/AppointmentModal'
@@ -78,9 +78,11 @@ export default function CalendarPage() {
   const [view, setView]         = useState('month')  // month | list
   const [year, setYear]         = useState(today.getFullYear())
   const [month, setMonth]       = useState(today.getMonth() + 1)
-  const [showCreate, setCreate] = useState(false)
-  const [createDate, setCreateDate] = useState(null)
-  const [selected, setSelected] = useState(null)
+  const [showCreate, setCreate]         = useState(false)
+  const [createDate, setCreateDate]     = useState(null)
+  const [selected, setSelected]         = useState(null)
+  const [editAppt, setEditAppt]         = useState(null)
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null)
 
   // ─── Fetch appointments ───────────────────────────────────────────────────
   const { data: apptData, isLoading } = useQuery({
@@ -142,11 +144,13 @@ export default function CalendarPage() {
     return days
   }, [year, month])
 
-  // Group appointments by date
+  // Group appointments by date — handles "2026-02-25 10:00:00" and "2026-02-25T10:00:00"
   const apptByDate = useMemo(() => {
     const map = {}
     appointments.forEach(a => {
-      const d = a.starts_at?.split('T')[0] || a.starts_at?.split(' ')[0]
+      if (!a.starts_at) return
+      // Always take just the date part before any T or space
+      const d = a.starts_at.substring(0, 10)
       if (!map[d]) map[d] = []
       map[d].push(a)
     })
@@ -364,73 +368,169 @@ export default function CalendarPage() {
               </div>
             )}
             {appointments.map(appt => {
-              const typeCfg   = TYPE_CONFIG[appt.type]   || TYPE_CONFIG.other
+              const typeCfg   = TYPE_CONFIG[appt.type]    || TYPE_CONFIG.other
               const statusCfg = STATUS_CONFIG[appt.status] || STATUS_CONFIG.scheduled
+              const isDeleting = deleteConfirmId === appt.id
+
               return (
-                <div
-                  key={appt.id}
-                  onClick={() => setSelected(appt)}
-                  style={{
-                    display: 'flex', gap: 14, padding: '14px 16px',
-                    borderRadius: 12, border: '1px solid #E2E8F0',
-                    marginBottom: 10, cursor: 'pointer', transition: 'all 0.15s',
-                    background: '#fff',
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.setProperty('box-shadow', '0 4px 12px rgba(0,0,0,0.08)')
-                    e.currentTarget.style.borderColor = '#CBD5E1'
-                    e.currentTarget.style.background = '#FAFBFF'
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.setProperty('box-shadow', 'none')
-                    e.currentTarget.style.borderColor = '#E2E8F0'
-                    e.currentTarget.style.background = '#fff'
-                  }}
-                >
-                  {/* Type icon */}
-                  <div style={{
-                    width: 44, height: 44, borderRadius: 12, flexShrink: 0,
-                    background: typeCfg.bg, display: 'flex', alignItems: 'center',
-                    justifyContent: 'center', fontSize: 20,
-                  }}>
-                    {typeCfg.icon}
-                  </div>
+                <div key={appt.id}>
+                  <div
+                    style={{
+                      display: 'flex', gap: 14, padding: '14px 16px',
+                      borderRadius: isDeleting ? '12px 12px 0 0' : 12,
+                      border: '1px solid',
+                      borderColor: isDeleting ? '#FECACA' : '#E2E8F0',
+                      borderBottom: isDeleting ? 'none' : '1px solid #E2E8F0',
+                      marginBottom: isDeleting ? 0 : 10,
+                      transition: 'all 0.15s', background: '#fff',
+                      alignItems: 'center',
+                    }}
+                  >
+                    {/* Type icon */}
+                    <div
+                      onClick={() => setSelected(appt)}
+                      style={{
+                        width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+                        background: typeCfg.bg, display: 'flex', alignItems: 'center',
+                        justifyContent: 'center', fontSize: 20, cursor: 'pointer',
+                      }}
+                    >
+                      {typeCfg.icon}
+                    </div>
 
-                  {/* Content */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
-                      <div style={{ fontWeight: 700, fontSize: 14, color: '#0F172A' }}>
-                        {appt.title}
+                    {/* Content — clickable */}
+                    <div
+                      onClick={() => setSelected(appt)}
+                      style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                        <div style={{ fontWeight: 700, fontSize: 14, color: '#0F172A' }}>
+                          {appt.title}
+                        </div>
+                        <span style={{
+                          fontSize: 11, padding: '2px 8px', borderRadius: 20,
+                          background: statusCfg.bg, color: statusCfg.color, fontWeight: 600,
+                        }}>
+                          {statusCfg.label}
+                        </span>
                       </div>
-                      <span style={{
-                        fontSize: 11, padding: '2px 8px', borderRadius: 20,
-                        background: statusCfg.bg, color: statusCfg.color, fontWeight: 600,
-                        flexShrink: 0, marginLeft: 8,
-                      }}>
-                        {statusCfg.label}
-                      </span>
+
+                      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 12, color: '#64748B', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <Clock size={11} />
+                          {formatDatetime(appt.starts_at)}
+                          {appt.ends_at && ` — ${formatTime(appt.ends_at)}`}
+                        </span>
+                        {appt.location && (
+                          <span style={{ fontSize: 12, color: '#64748B' }}>📍 {appt.location}</span>
+                        )}
+                        {appt.lead && (
+                          <span style={{ fontSize: 12, color: '#7C3AED' }}>🎯 {appt.lead.name}</span>
+                        )}
+                        {appt.property && (
+                          <span style={{ fontSize: 12, color: '#2563EB' }}>🏠 {appt.property.title}</span>
+                        )}
+                        {appt.assigned_to && (
+                          <span style={{ fontSize: 12, color: '#94A3B8' }}>→ {appt.assigned_to.name}</span>
+                        )}
+                      </div>
                     </div>
 
-                    <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 12, color: '#64748B', display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <Clock size={11} />
-                        {formatDatetime(appt.starts_at)}
-                        {appt.ends_at && ` — ${formatTime(appt.ends_at)}`}
-                      </span>
-                      {appt.location && (
-                        <span style={{ fontSize: 12, color: '#64748B' }}>📍 {appt.location}</span>
-                      )}
-                      {appt.lead && (
-                        <span style={{ fontSize: 12, color: '#7C3AED' }}>🎯 {appt.lead.name}</span>
-                      )}
-                      {appt.property && (
-                        <span style={{ fontSize: 12, color: '#2563EB' }}>🏠 {appt.property.title}</span>
-                      )}
-                      {appt.assigned_to && (
-                        <span style={{ fontSize: 12, color: '#94A3B8' }}>→ {appt.assigned_to.name}</span>
-                      )}
-                    </div>
+                    {/* ── Edit + Delete buttons ── */}
+                    {!isAgent && (
+                      <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                        <button
+                          onClick={e => { e.stopPropagation(); setEditAppt(appt) }}
+                          title="Edit appointment"
+                          style={{
+                            width: 32, height: 32, borderRadius: 8,
+                            border: '1px solid #E2E8F0', background: '#F8FAFC',
+                            cursor: 'pointer', display: 'flex',
+                            alignItems: 'center', justifyContent: 'center',
+                            transition: 'all 0.15s',
+                          }}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.background = '#EFF6FF'
+                            e.currentTarget.style.borderColor = '#BFDBFE'
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.background = '#F8FAFC'
+                            e.currentTarget.style.borderColor = '#E2E8F0'
+                          }}
+                        >
+                          <Pencil size={13} color="#2563EB" />
+                        </button>
+                        <button
+                          onClick={e => {
+                            e.stopPropagation()
+                            setDeleteConfirmId(isDeleting ? null : appt.id)
+                          }}
+                          title="Delete appointment"
+                          style={{
+                            width: 32, height: 32, borderRadius: 8,
+                            border: `1px solid ${isDeleting ? '#FECACA' : '#E2E8F0'}`,
+                            background: isDeleting ? '#FEF2F2' : '#F8FAFC',
+                            cursor: 'pointer', display: 'flex',
+                            alignItems: 'center', justifyContent: 'center',
+                            transition: 'all 0.15s',
+                          }}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.background = '#FEF2F2'
+                            e.currentTarget.style.borderColor = '#FECACA'
+                          }}
+                          onMouseLeave={e => {
+                            if (!isDeleting) {
+                              e.currentTarget.style.background = '#F8FAFC'
+                              e.currentTarget.style.borderColor = '#E2E8F0'
+                            }
+                          }}
+                        >
+                          <Trash2 size={13} color="#DC2626" />
+                        </button>
+                      </div>
+                    )}
                   </div>
+
+                  {/* ── Delete confirm row ── */}
+                  {isDeleting && (
+                    <div style={{
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      padding: '10px 16px', marginBottom: 10,
+                      background: '#FEF2F2', border: '1px solid #FECACA',
+                      borderTop: 'none', borderRadius: '0 0 12px 12px',
+                    }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: '#DC2626' }}>
+                        🗑️ Delete "{appt.title}"?
+                      </span>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button
+                          onClick={() => setDeleteConfirmId(null)}
+                          style={{
+                            padding: '5px 14px', borderRadius: 7,
+                            border: '1px solid #E2E8F0', background: '#fff',
+                            fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                            fontFamily: "'DM Sans', sans-serif",
+                          }}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={() => {
+                            deleteAppt.mutate(appt.id)
+                            setDeleteConfirmId(null)
+                          }}
+                          style={{
+                            padding: '5px 14px', borderRadius: 7, border: 'none',
+                            background: '#DC2626', color: '#fff',
+                            fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                            fontFamily: "'DM Sans', sans-serif",
+                          }}
+                        >
+                          Yes, Delete
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )
             })}
@@ -449,6 +549,23 @@ export default function CalendarPage() {
             qc.invalidateQueries({ queryKey: ['appointments'] })
             qc.invalidateQueries({ queryKey: ['appt-stats'] })
             setCreate(false)
+          }}
+        />
+      )}
+
+      {/* Edit from list view */}
+      {editAppt && (
+        <AppointmentModal
+          appointment={editAppt}
+          isAgent={isAgent}
+          apiBase={apiBase}
+          onClose={() => setEditAppt(null)}
+          onSaved={(updated) => {
+            qc.invalidateQueries({ queryKey: ['appointments'] })
+            qc.invalidateQueries({ queryKey: ['appt-stats'] })
+            setEditAppt(null)
+            // Also update detail modal if it's open
+            if (selected?.id === editAppt.id) setSelected(updated)
           }}
         />
       )}
