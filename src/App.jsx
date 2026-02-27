@@ -8,8 +8,10 @@ import AppLayout from './components/layout/AppLayout'
 import LoginPage from './pages/auth/LoginPage'
 
 // Super Admin
-import SuperAdminDashboard from './pages/super-admin/Dashboard'
-import AgenciesPage from './pages/super-admin/Agencies'
+import SuperAdminDashboard    from './pages/super-admin/Dashboard'
+import AgenciesPage           from './pages/super-admin/Agencies'
+import PlansPage              from './pages/super-admin/Plans'
+import SuperAdminSettingsPage from './pages/super-admin/SuperAdminSettings'
 
 // Agency Admin + Agent (shared pages)
 import AgencyDashboard from './pages/agency/Dashboard'
@@ -21,6 +23,7 @@ import InboxPage       from './pages/agency/Inbox'
 import CalendarPage    from './pages/agency/Calendar'
 import AnalyticsPage   from './pages/agency/Analytics'
 import SettingsPage    from './pages/agency/Settings'
+import BillingPage     from './pages/agency/Billing'
 
 function App() {
   return (
@@ -41,8 +44,10 @@ function App() {
             </ProtectedRoute>
           }>
             <Route index element={<Navigate to="dashboard" replace />} />
-            <Route path="dashboard" element={<SuperAdminDashboard />} />
-            <Route path="agencies"  element={<AgenciesPage />} />
+            <Route path="dashboard"  element={<SuperAdminDashboard />} />
+            <Route path="agencies"   element={<AgenciesPage />} />
+            <Route path="plans"      element={<PlansPage />} />
+            <Route path="settings"   element={<SuperAdminSettingsPage />} />
           </Route>
 
           {/* ─── Agency Admin ─── */}
@@ -60,6 +65,7 @@ function App() {
             <Route path="calendar"   element={<CalendarPage />} />
             <Route path="analytics"  element={<AnalyticsPage />} />
             <Route path="settings"   element={<SettingsPage />} />
+            <Route path="billing"    element={<BillingPage />} />
           </Route>
 
           {/* ─── Agent ─── */}
